@@ -2,37 +2,45 @@ require 'xlua'
 xrequire ('image', true)
 xrequire ('nnx', true)
 
+classes = {'0','1','2','3','4','5','6','7','8','9'}
+-- geometry: width and height of input images
+geometry = {32,32}
 ----------------------------------------------------------------------
--- define network to train: CSCF
+-- define network to train
 --
-convnet = nn.Sequential()
-convnet:add(nn.SpatialNormalization(1, image.gaussian(7)))
-convnet:add(nn.SpatialConvolution(1, 8, 5, 5))
-convnet:add(nn.Tanh())
-convnet:add(nn.Abs())
-convnet:add(nn.SpatialSubSampling(8, 4, 4, 4, 4))
-convnet:add(nn.Tanh())
-convnet:add(nn.SpatialConvolutionMap(nn.tables.random(8, 32, 4), 7, 7))
-convnet:add(nn.Tanh())
-convnet:add(nn.SpatialClassifier(nn.Linear(32,10)))
+model = nn.Sequential()
+-- stage 1 : mean suppresion -> filter bank -> squashing -> max pooling
+model:add(nn.SpatialSubtractiveNormalization(1, image.gaussian1D(15)))
+model:add(nn.SpatialConvolution(1, 50, 5, 5))
+model:add(nn.Tanh())
+model:add(nn.SpatialMaxPooling(2, 2, 2, 2))
+-- stage 2 : mean suppresion -> filter bank -> squashing -> max pooling
+model:add(nn.SpatialSubtractiveNormalization(50, image.gaussian1D(15)))
+model:add(nn.SpatialConvolutionMap(nn.tables.random(50, 128, 10), 5, 5))
+model:add(nn.Tanh())
+model:add(nn.SpatialMaxPooling(2, 2, 2, 2))
+-- stage 3 : standard 2-layer neural network
+model:add(nn.Reshape(128*5*5))
+model:add(nn.Linear(128*5*5, 200))
+model:add(nn.Tanh())
+model:add(nn.Linear(200,#classes))
 
 ----------------------------------------------------------------------
--- training criterion: a simple Mean-Square Error
+-- loss function: negative log-likelihood
 --
-criterion = nn.MSECriterion()
-criterion.sizeAverage = true
-
+criterion = nn.DistNLLCriterion()
+criterion.targetIsProbability = true
 
 ----------------------------------------------------------------------
 -- trainer and hooks
 --
-optimizer = nn.SGDOptimization{module = convnet,
+optimizer = nn.SGDOptimization{module = model,
                                criterion = criterion,
                                learningRate = 1e-3,
                                weightDecay = 1e-6,
                                momentum = 0.8}
 
-trainer = nn.OnlineTrainer{module = convnet, 
+trainer = nn.OnlineTrainer{module = model, 
                            criterion = criterion,
                            optimizer = optimizer,
                            maxEpoch = 100,
@@ -101,8 +109,8 @@ for i=1,10 do
    trainData:appendDataSet(dataHnum_train[i],tostring(i-1))
    testData:appendDataSet(dataHnum_val[i],tostring(i-1))
 end
-trainData.spatialTarget = true
-testData.spatialTarget = true
+--trainData.spatialTarget = true
+--testData.spatialTarget = true
 ----------------------------------------------------------------------
 -- and train !!
 --
