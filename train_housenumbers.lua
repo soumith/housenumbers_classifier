@@ -2,6 +2,10 @@ require 'xlua'
 xrequire ('image', true)
 xrequire ('nnx', true)
 
+datapath = '/misc/vlgscratch1/LecunGroup/sc3104/datasets/vision/stanford_housenumbers/'
+use_openmp = true
+openmp_threads = 10
+
 classes = {'0','1','2','3','4','5','6','7','8','9'}
 -- geometry: width and height of input images
 geometry = {32,32}
@@ -32,6 +36,16 @@ criterion = nn.DistNLLCriterion()
 criterion.targetIsProbability = true
 
 ----------------------------------------------------------------------
+
+if use_openmp then
+   require 'openmp'
+   openmp.setDefaultNumThreads(openmp_threads)
+   print('<OpenMP> enabled with ' .. openmp_threads .. ' threads')
+end
+
+
+
+---------------------------------------------------------------------
 -- trainer and hooks
 --
 optimizer = nn.SGDOptimization{module = model,
@@ -86,18 +100,16 @@ trainer.hookTrainEpoch = function(trainer)
 --
 dataHnum_train = {}
 for i=1,10 do
-dataHnum_train[i] = nn.DataSet{dataSetFolder='/home/rex/datasets/stanford_housenumbers/train_train_32x32/'..tostring(i-1), 
-                               cacheFile='/home/rex/datasets/stanford_housenumbers/'
-                               ..'train_torchcache_'..tostring(i-1),
+dataHnum_train[i] = nn.DataSet{dataSetFolder=datapath .. 'train_train_32x32/' .. tostring(i-1), 
+                               cacheFile=datapath ..'train_torchcache_'..tostring(i-1),
                       channels=1,
                                useDirAsLabel = true}
       dataHnum_train[i]:shuffle()
 end
 dataHnum_val = {}
 for i=1,10 do
-dataHnum_val[i] = nn.DataSet{dataSetFolder='/home/rex/datasets/stanford_housenumbers/train_val_32x32/'..tostring(i-1), 
-                               cacheFile='/home/rex/datasets/stanford_housenumbers/'
-                               ..'val_torchcache_'..tostring(i-1),
+dataHnum_val[i] = nn.DataSet{dataSetFolder=datapath .. 'train_val_32x32/'..tostring(i-1), 
+                               cacheFile=datapath..'val_torchcache_'..tostring(i-1),
                       channels=1,
                              useDirAsLabel = true}
       dataHnum_val[i]:shuffle()
