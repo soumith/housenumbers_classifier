@@ -4,7 +4,10 @@ xrequire ('nnx', true)
 
 datapath = '/misc/vlgscratch1/LecunGroup/sc3104/datasets/vision/stanford_housenumbers/'
 use_openmp = true
-openmp_threads = 10
+openmp_threads = 4
+
+
+torch.setdefaulttensortype('torch.FloatTensor')
 
 classes = {'0','1','2','3','4','5','6','7','8','9'}
 -- geometry: width and height of input images
@@ -14,21 +17,19 @@ geometry = {32,32}
 --
 model = nn.Sequential()
 -- stage 1 : mean suppresion -> filter bank -> squashing -> max pooling
-model:add(nn.SpatialSubtractiveNormalization(1, image.gaussian1D(15)))
-model:add(nn.SpatialConvolution(1, 50, 5, 5))
+model:add(nn.SpatialConvolution(1, 6, 5, 5))
 model:add(nn.Tanh())
-model:add(nn.SpatialMaxPooling(2, 2, 2, 2))
+model:add(nn.SpatialLPPooling(6, 2, 2, 2, 2, 2)) -- L2
 -- stage 2 : mean suppresion -> filter bank -> squashing -> max pooling
-model:add(nn.SpatialSubtractiveNormalization(50, image.gaussian1D(15)))
-model:add(nn.SpatialConvolutionMap(nn.tables.random(50, 128, 10), 5, 5))
+model:add(nn.SpatialConvolution(6, 16, 5, 5))
 model:add(nn.Tanh())
-model:add(nn.SpatialMaxPooling(2, 2, 2, 2))
+model:add(nn.SpatialLPPooling(16, 2, 2, 2, 2, 2)) -- L2
 -- stage 3 : standard 2-layer neural network
-model:add(nn.Reshape(128*5*5))
-model:add(nn.Linear(128*5*5, 200))
+model:add(nn.SpatialConvolution(16, 120, 5, 5))
 model:add(nn.Tanh())
-model:add(nn.Linear(200,#classes))
+model:add(nn.Linear(120,#classes))
 
+print(model)
 ----------------------------------------------------------------------
 -- loss function: negative log-likelihood
 --
@@ -51,13 +52,13 @@ end
 optimizer = nn.SGDOptimization{module = model,
                                criterion = criterion,
                                learningRate = 1e-3,
-                               weightDecay = 1e-6,
-                               momentum = 0.8}
+                               weightDecay = 0,
+                               momentum = 0.0}
 
 trainer = nn.OnlineTrainer{module = model, 
                            criterion = criterion,
                            optimizer = optimizer,
-                           maxEpoch = 100,
+                           maxEpoch = 20,
                            batchSize = 1,
                            save = 'weights.dat'}
 
@@ -101,7 +102,7 @@ trainer.hookTrainEpoch = function(trainer)
 dataHnum_train = {}
 for i=1,10 do
 dataHnum_train[i] = nn.DataSet{dataSetFolder=datapath .. 'train_train_32x32/' .. tostring(i-1), 
-                               cacheFile=datapath ..'train_torchcache_'..tostring(i-1),
+                               cacheFile=datapath ..'torchcache/train_torchcache_'..tostring(i-1),
                       channels=1,
                                useDirAsLabel = true}
       dataHnum_train[i]:shuffle()
@@ -109,7 +110,7 @@ end
 dataHnum_val = {}
 for i=1,10 do
 dataHnum_val[i] = nn.DataSet{dataSetFolder=datapath .. 'train_val_32x32/'..tostring(i-1), 
-                               cacheFile=datapath..'val_torchcache_'..tostring(i-1),
+                               cacheFile=datapath..'torchcache/val_torchcache_'..tostring(i-1),
                       channels=1,
                              useDirAsLabel = true}
       dataHnum_val[i]:shuffle()
